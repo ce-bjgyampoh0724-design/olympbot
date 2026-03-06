@@ -1,1 +1,1 @@
-python olmptrade_bot.py 
+python olymptrade_bot.py
