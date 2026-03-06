@@ -1,7 +1,11 @@
+
+cat > /mnt/user-data/outputs/render.yaml << 'EOF'
 services:
-  - type: worker
+  - type: web
     name: olympbot
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python olymptrade_bot.py
     plan: free
+
+
