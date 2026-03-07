@@ -1,5 +1,7 @@
 import logging
 import random
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, time, timedelta
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
@@ -33,18 +35,26 @@ ASSETS = {
 EXPIRY_OPTIONS = [1, 2, 3, 5]
 
 SIGNAL_TIMES = [
-    time(6, 0),
-    time(8, 0),
-    time(10, 0),
-    time(12, 0),
-    time(14, 0),
-    time(16, 0),
-    time(18, 0),
-    time(20, 0),
+    time(6, 0), time(8, 0), time(10, 0), time(12, 0),
+    time(14, 0), time(16, 0), time(18, 0), time(20, 0),
 ]
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass
+
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
+    server.serve_forever()
 
 
 def generate_signal():
@@ -58,7 +68,7 @@ def generate_signal():
     level1 = entry_time + timedelta(minutes=expiry)
     level2 = level1 + timedelta(minutes=expiry)
     level3 = level2 + timedelta(minutes=expiry)
-    signal = (
+    return (
         "NEW SIGNAL!\n\n"
         "Trade: " + asset + "\n"
         "Timer: " + str(expiry) + " minutes\n"
@@ -71,7 +81,6 @@ def generate_signal():
         "Level 3 -> " + level3.strftime("%I:%M %p") + "\n\n"
         "Trade responsibly. For educational purposes only."
     )
-    return signal
 
 
 def generate_batch_signals(count=4):
@@ -88,19 +97,11 @@ def generate_batch_signals(count=4):
         direction = random.choice(["BUY", "SELL"])
         expiry = random.choice(EXPIRY_OPTIONS)
         confidence = random.randint(70, 92)
-        signals.append({
-            "asset": asset,
-            "category": category,
-            "direction": direction,
-            "expiry": expiry,
-            "confidence": confidence,
-        })
+        signals.append({"asset": asset, "category": category, "direction": direction, "expiry": expiry, "confidence": confidence})
         attempts += 1
 
     now = datetime.utcnow()
-    header_time = now.strftime("%I:%M %p UTC")
-    lines = ["OLYMP TRADE SIGNALS - " + header_time, "=" * 32]
-
+    lines = ["OLYMP TRADE SIGNALS - " + now.strftime("%I:%M %p UTC"), "=" * 32]
     for i, s in enumerate(signals, 1):
         entry_time = now + timedelta(minutes=i)
         level1 = entry_time + timedelta(minutes=s["expiry"])
@@ -119,7 +120,6 @@ def generate_batch_signals(count=4):
             "  Level 3 -> " + level3.strftime("%I:%M %p")
         )
         lines.append("-" * 32)
-
     lines.append("Trade responsibly. For educational purposes only.")
     return "\n\n".join(lines)
 
@@ -164,6 +164,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health server started on port 8080")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("signal", signal_command))
